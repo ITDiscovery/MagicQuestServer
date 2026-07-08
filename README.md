@@ -36,5 +36,8 @@ Because the XIAO ESP32 does not break out its USB data lines to the edge pins, t
 4. **Cast a Spell:** Open the main IP address on a phone or tablet, tap "Activate Crystal," and flick your MagiQuest wand at the stone!
 5. **Import a Story:** Stories are stored in the LittleFS and are comma deliniated. These files can then be imported via the Arduino IDE directly onto the LittleFS.
 
+## Acknowledgement
+The objects provided via https://www.thingiverse.com/thing:1012118 (Phillip Avery) are the basis for these cases.
+
 ## 📜 License
 MIT License - Free to use, modify, and build upon.
