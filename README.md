@@ -31,7 +31,7 @@ Because the XIAO ESP32 does not break out its USB data lines to the edge pins, t
 
 ## 🚀 How to Play
 1. **Power On:** Plug the stone into any standard USB wall charger.
-2. **Wi-Fi Setup:** On first boot, the ESP32 creates an Access Point at 192.168.4.1 with the SSID of MagiQuest-Admin. The password with "magic123". This is used only to connect it to home 2.4GHz wifi (the ESP32-S3 supports ONLY the 2.4GHz wifi band). Navigate to that address and append `/admin` to open the Admin panel to add your local SSID and password. 
+2. **Wi-Fi Setup:** On first boot, the ESP32 creates an Access Point at 192.168.4.1 with the SSID of `MagiQuest-Admin`. The password with   `magic123`. This is used only to connect it to home 2.4GHz wifi (the ESP32-S3 supports ONLY the 2.4GHz wifi band). Navigate to that address and append `/admin` to open the Admin panel to add your local SSID and password. 
 3. **Author a Story:** Navigate to the stone's IP address on your local network and append `/author` to open the Author Panel. Link your YouTube Video IDs to build your story.
 4. **Cast a Spell:** Open the main IP address on a phone or tablet, tap "Activate Crystal," and flick your MagiQuest wand at the stone!
 5. **Import a Story:** Stories are stored in the LittleFS and are comma deliniated. These files can then be imported via the Arduino IDE directly onto the LittleFS.
