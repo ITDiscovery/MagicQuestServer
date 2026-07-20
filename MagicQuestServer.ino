@@ -2,6 +2,11 @@
 #include <WebServer.h>
 #include <Preferences.h> 
 #include <LittleFS.h> 
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLEAdvertising.h>
+
 
 #define DECODE_MAGIQUEST
 #include <IRremote.hpp>
@@ -11,6 +16,7 @@
 WebServer server(80);
 Preferences preferences;
 Preferences wandPrefs; 
+Preferences blePrefs;
 
 String currentSSID;
 String currentPassword;
@@ -22,6 +28,14 @@ String pendingCasterName = "";
 String pendingStoryName = ""; // <-- NEW: Tracks the story during pairing
 unsigned long pairingStartTime = 0;
 const unsigned long PAIRING_TIMEOUT = 30000;
+
+// --- Galaxy's Edge BLE Settings ---
+uint8_t activeBeaconPreset = 1; // Default to Market
+BLEAdvertising *pAdvertising;
+
+// --- Sniffer Dashboard Variables ---
+String lastSniffedHex = "Waiting for signal...";
+String lastSniffedProtocol = "UNKNOWN";
 
 // --- Main Webpage (Your MagiQuest UI) ---
 const char index_html[] PROGMEM = R"rawliteral(
@@ -163,6 +177,20 @@ const char admin_html[] PROGMEM = R"rawliteral(
 
       <div id="casterWorkspace" style="text-align: left; background: #444; padding: 20px; border-radius: 5px; min-height: 150px;">
          <p style="text-align:center; color:#aaa;">Loading casters...</p>
+      </div>
+    </div>
+
+    <!-- NEW: System Tools and Network Status -->
+    <div class="box" style="max-width: 800px; margin-top: 20px;">
+      <h2>System Tools & Status</h2>
+      <div style="background: #444; padding: 15px; border-radius: 5px; text-align: left; margin-bottom: 20px;">
+        <p style="margin: 5px 0;"><b>IP Address:</b> %IP%</p>
+        <p style="margin: 5px 0;"><b>MAC Address:</b> %MAC%</p>
+        <p style="margin: 5px 0;"><b>WiFi Signal:</b> %RSSI% dBm</p>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <a href="/sniffer" class="btn-green" style="text-decoration:none; padding:12px 20px; border-radius:5px;">IR Sniffer</a>
+        <a href="/edge" class="btn-purple" style="text-decoration:none; padding:12px 20px; border-radius:5px;">Batuu Beacons</a>
       </div>
     </div>
 
@@ -388,6 +416,44 @@ const char author_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+// --- Galaxy's Edge Webpage ---
+const char edge_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Batuu Beacons - MagiQuest</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  %DASHBOARD_CSS%
+</head>
+<body>
+  <div class="sidebar">
+    <h2>DASHBOARD</h2>
+    <a href="/">Main (Story)</a>
+    <a href="/author">Author Panel</a>
+    <a href="/admin">Admin Panel</a>
+    <a href="/edge" class="active">Batuu Beacons</a>
+  </div>
+  
+  <div class="content">
+    <div class="box" style="max-width: 600px;">
+      <h2>Galaxy's Edge Beacon Control</h2>
+      <form action="/edge" method="GET">
+        <h3 style="text-align: left; margin-top: 20px;">Select Active Location:</h3>
+        <select name="preset" style="width: 100%; padding: 12px; margin-bottom: 20px; background: #444; color: white; border: 1px solid #555; border-radius: 5px; font-size: 1.1rem;">
+          <option value="1" %SEL_1%>Market / Spaceport / Black Spire</option>
+          <option value="2" %SEL_2%>First Order Outpost</option>
+          <option value="3" %SEL_3%>Resistance Base</option>
+          <option value="4" %SEL_4%>Scrap Area</option>
+          <option value="5" %SEL_5%>Droid Depot</option>
+        </select>
+        <button type="submit" class="btn-purple" style="width: 100%;">TRANSMIT BEACON DATA</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
+)rawliteral";
+
 // --- Game Master CSV Reader ---
 String getVideoForPage(String storyName, int targetPage) {
   // Ensure formatting is perfect for LittleFS
@@ -492,6 +558,38 @@ void processSpell(String hexStr, String nodeID, int magnitude) {
   }
 }
 
+void updateBLEBeacon() {
+  if (!pAdvertising) return;
+
+  // Base Array: Manufacturer (83 01), Type (0A), Length (04), Payload (4 bytes)
+  uint8_t gePayload[8] = { 0x83, 0x01, 0x0A, 0x04, 0x00, 0x00, 0x00, 0x00 };
+
+  // Inject the exact 4-byte authentic Disney payloads based on the selected preset
+  switch(activeBeaconPreset) {
+    case 1: // Market / Spaceport / Black Spire
+      gePayload[4] = 0x01; gePayload[5] = 0x02; gePayload[6] = 0xA6; gePayload[7] = 0x01; break;
+    case 2: // First Order Outpost
+      gePayload[4] = 0x01; gePayload[5] = 0x01; gePayload[6] = 0xA6; gePayload[7] = 0x01; break;
+    case 3: // Resistance Base
+      gePayload[4] = 0x03; gePayload[5] = 0x02; gePayload[6] = 0xA6; gePayload[7] = 0x01; break;
+    case 4: // Scrap Area
+      gePayload[4] = 0x01; gePayload[5] = 0x03; gePayload[6] = 0xA6; gePayload[7] = 0x01; break;
+    case 5: // Droid Depot
+      gePayload[4] = 0x02; gePayload[5] = 0x02; gePayload[6] = 0xA6; gePayload[7] = 0x01; break;
+  }
+
+  BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
+  oAdvertisementData.setManufacturerData(String((char*)gePayload, sizeof(gePayload)));
+  pAdvertising->setAdvertisementData(oAdvertisementData);
+  
+  // Restart the beacon to apply changes
+  pAdvertising->stop();
+  delay(10);
+  pAdvertising->start();
+  
+  Serial.printf("[BLE] Beacon Updated to Disney Preset %d\n", activeBeaconPreset);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -511,7 +609,9 @@ void setup() {
   currentPassword = preferences.getString("pass", "Default_Password");
 
   Serial.print("Connecting to saved Wi-Fi: ");
-  Serial.println(currentSSID);
+  Serial.print(currentSSID);
+  Serial.print("/");
+  Serial.println(currentPassword);
   
   WiFi.mode(WIFI_STA);
   WiFi.begin(currentSSID.c_str(), currentPassword.c_str());
@@ -538,6 +638,20 @@ void setup() {
     Serial.print(WiFi.softAPIP());
     Serial.println("/admin");
   }
+  
+  // ---------------------------------------------------------
+  // START GALAXY'S EDGE BLE BEACON
+  // ---------------------------------------------------------
+  // Load Galaxy's Edge preset from memory
+  blePrefs.begin("ge_beacon", false); 
+  activeBeaconPreset = blePrefs.getUChar("preset", 1);
+
+  Serial.println("[BLE] Starting Galaxy's Edge Beacon...");
+  BLEDevice::init("MagiQuest-GE-Node");
+  pAdvertising = BLEDevice::getAdvertising();
+  
+  // Call the update function to set the initial payload and start broadcasting
+  updateBLEBeacon();
 
   // --- Core Web Server Routes ---
   server.on("/", []() {
@@ -549,15 +663,50 @@ void setup() {
     lastPayload = ""; 
   });
 
-  server.on("/admin", []() {
+server.on("/admin", []() {
     String html = String(admin_html);
+    
+    // Inject the CSS and Live Data
     html.replace("%DASHBOARD_CSS%", dashboard_css);
+    html.replace("%IP%", WiFi.localIP().toString());
+    html.replace("%MAC%", WiFi.macAddress());
+    html.replace("%RSSI%", String(WiFi.RSSI()));
+    
     server.send(200, "text/html", html);
   });
 
   server.on("/author", []() {
     String html = String(author_html);
     html.replace("%DASHBOARD_CSS%", dashboard_css);
+    server.send(200, "text/html", html);
+  });
+
+  server.on("/edge", []() {
+    // Process form submission and save to preferences
+    if (server.hasArg("preset")) {
+      activeBeaconPreset = (uint8_t) server.arg("preset").toInt();
+      blePrefs.putUChar("preset", activeBeaconPreset);
+      updateBLEBeacon();
+      
+      // Clean redirect to avoid duplicate submissions on page refresh
+      server.sendHeader("Location", "/edge");
+      server.send(303);
+      return;
+    }
+
+    String html = String(edge_html);
+    html.replace("%DASHBOARD_CSS%", dashboard_css);
+    
+    // Dynamically add the "selected" attribute to the correct dropdown option
+    for (int i = 1; i <= 5; i++) {
+      String placeholder = "%SEL_" + String(i) + "%";
+      if (activeBeaconPreset == i) {
+         html.replace(placeholder, "selected");
+      } else {
+         html.replace(placeholder, "");
+      }
+    }
+    
     server.send(200, "text/html", html);
   });
 
@@ -771,6 +920,20 @@ server.on("/api/update_caster", HTTP_POST, []() {
     }
   });
 
+  server.on("/sniffer", []() {
+    String html = "<html><head><title>Server IR Sniffer</title>";
+    html += "<meta http-equiv='refresh' content='2'>"; // Auto-refresh every 2s
+    html += "<style>body { background-color: #111; color: #00ffcc; font-family: monospace; text-align: center; margin-top: 10%; }</style>";
+    html += "</head><body>";
+    html += "<h2>MagicQuestServer Diagnostic Sniffer</h2>";
+    html += "<h1>Last IR Code Captured:</h1>";
+    html += "<p style='font-size: 4rem; border: 2px solid #00ffcc; display: inline-block; padding: 20px; border-radius: 15px; margin: 10px;'>" + lastSniffedHex + "</p>";
+    html += "<h3>Protocol Identified: <span style='color: #ffeb3b;'>" + lastSniffedProtocol + "</span></h3>";
+    html += "</body></html>";
+    
+    server.send(200, "text/html", html);
+  });
+
     server.begin();
 }
 
@@ -782,15 +945,33 @@ void loop() {
     Serial.println("Pairing mode timed out.");
   }
 
-  // Local IR Receiver
-  if (IrReceiver.decode()) {
+if (IrReceiver.decode()) {
+    // ---------------------------------------------------------
+    // STEP A: Feed the Sniffer (Catch EVERYTHING)
+    // ---------------------------------------------------------
+    // Get the protocol name (IRremote v3/v4 has a built-in helper for this)
+    lastSniffedProtocol = String(getProtocolString(IrReceiver.decodedIRData.protocol));
+    
+    // Get the raw hex data
+    lastSniffedHex = String(IrReceiver.decodedIRData.decodedRawData, HEX);
+    lastSniffedHex.toUpperCase();
+    
+    // Optional: Print everything to the Master's Serial Monitor too
+    Serial.println("[Sniffer] Protocol: " + lastSniffedProtocol + " | Hex: " + lastSniffedHex);
+
+
+    // ---------------------------------------------------------
+    // STEP B: The Actual Game Engine (Filter for MagiQuest ONLY)
+    // ---------------------------------------------------------
     if (IrReceiver.decodedIRData.protocol == MAGIQUEST) {
-      uint32_t wandID = IrReceiver.decodedIRData.decodedRawData;
-      String hexStr = String(wandID, HEX);
+      // Your existing game logic goes here!
+      // Example: check wand ID against LittleFS story CSVs, 
+      // update Preferences, trigger WebSocket video change, etc.
       
-      // Pass the Hex, the Node ID, and a default magnitude of 1
-      processSpell(hexStr, "Master_Stone", 1); 
+      Serial.println("[Game] Valid Spell Cast by Wand: " + lastSniffedHex);
     }
+
+    // Resume listening for the next burst
     IrReceiver.resume();
   }
 }
