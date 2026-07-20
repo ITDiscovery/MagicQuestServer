@@ -1,17 +1,22 @@
 # MagicQuestServer: ESP32 MagiQuest Game Engine
 
-A self-contained, open-source game engine running entirely on an ESP32 that decodes authentic MagiQuest wands and triggers sequential video quests. To do: Branching video quests via a master MagicQuestServer and slave servers that would be located in different parts of the room is a coming feature.
-
+A self-contained, open-source game engine running entirely on an ESP32 that decodes authentic MagiQuest wands, triggers sequential video quests, and interacts with Galaxy's Edge hardware.
+Coming Soon: Branching video quests via a master MagicQuestServer and wireless "satellite" slave servers located in different parts of the room.
 This project liberates comatose, proprietary theme-park tech and allows you to build your own interactive wand-based escape rooms, puzzles, or living room adventures.
 
 ## 🌟 Features
-* **Standalone Local Engine:** No cloud subscriptions or external servers required. Everything runs locally on the ESP32.
-* **Authentic Wand Decoding:** Reads the 38kHz IR bursts from real MagiQuest wands and extracts the unique Hex ID.
-* **Persistent Player Save States:** Uses the ESP32's non-volatile memory (Preferences library) to securely track which wand belongs to which player and exactly what page of the story they are currently on.
-* **Local Asset Storage:** Uses LittleFS solely to store and serve the web UI assets and the CSV story files.
-* **Dynamic Web Dashboard:** A built-in web server provides an Author Panel to easily map YouTube Video IDs to specific wand actions and story pages.
-* **Seamless Media Playback:** A captive UI dynamically recycles an embedded YouTube iframe to display video sequences seamlessly on a phone or tablet.
-* **Extensible API:** Built-in REST endpoints allow you to expand the game with remote, wireless "satellite" stones (ESP8266) in the future.
+* Standalone Local Engine: No cloud subscriptions or external servers required. Everything runs locally on the ESP32.
+* Authentic Wand Decoding: Reads the 38kHz IR bursts from real MagiQuest wands and extracts the unique Hex ID.
+* Galaxy's Edge BLE Beacons: Built-in Bluetooth Low Energy broadcasting emits authentic Disney location data (Droid Depot, Resistance Base, Market, etc.). Your interactive Batuu toys and custom droids will react dynamically to the room!
+* Persistent Player Save States: Uses the ESP32's non-volatile memory (Preferences.h) to securely track which wand belongs to which player and exactly what page of the story they are currently on.
+* Local Asset Storage: Uses LittleFS solely to store and serve the web UI assets and the CSV story files.
+* Unified Web Dashboards: A suite of built-in web servers providing:
+* Author Panel: Easily map YouTube Video IDs to specific wand actions and story pages.
+* Admin Panel: View network status (IP, MAC, RSSI) and pair new casters.
+* Edge Panel: Shift the room's Galaxy's Edge BLE identity on the fly.
+* Diagnostic IR Sniffer: A real-time web tool to capture and identify raw IR protocols and hex codes when testing new wands or remotes.
+* Seamless Media Playback: A captive UI dynamically recycles an embedded YouTube iframe to display video sequences seamlessly on a phone, tablet, or smart TV.
+* Extensible API: Built-in REST endpoints (/api/remote_cast) allow you to expand the game with remote, wireless "satellite" stones (ESP8266) in the future.
 
 ## 🛠️ Hardware Used
 * **Microcontroller:** Seeed Studio XIAO ESP32 (S3/C3) - Chosen for its incredibly tiny footprint.
